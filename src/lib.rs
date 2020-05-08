@@ -1,4 +1,5 @@
 #![allow(clippy::new_without_default, clippy::needless_pass_by_value)]
+#![recursion_limit = "256"]
 
 #[macro_use]
 extern crate tracing;
@@ -20,6 +21,7 @@ pub mod generate;
 pub mod internal_events;
 #[cfg(feature = "rdkafka")]
 pub mod kafka;
+pub mod kubernetes;
 pub mod list;
 pub mod metrics;
 pub mod region;
