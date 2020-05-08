@@ -44,10 +44,16 @@ impl PodsWatcher {
 
             let body = response.into_body();
             let watch_stream = stream::body::<_, WatchResponse<Pod>>(body);
-            pin_mut!(watch_stream);
 
+            pin_mut!(watch_stream);
             while let Some(item) = watch_stream.next().await {
-                info!("Got an item: {:?}", item);
+                let item = item?;
+                match item {
+                    WatchResponse::Ok(event) => {
+                        info!("Got an event: {:?}", event);
+                    }
+                    WatchResponse::Other(_) => panic!("qwe"),
+                }
             }
         }
     }
