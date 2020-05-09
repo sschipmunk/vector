@@ -1,14 +1,15 @@
-use evmap::{ReadHandle, WriteHandle};
+use evmap10::{ReadHandle, WriteHandle};
 use k8s_openapi::Metadata;
 use std::collections::HashMap;
+use std::hash::Hash;
 
 #[derive(Debug)]
-pub struct WatchedState<T> {
-    items: WriteHandle<String, T>,
+pub struct WatchedState<T: Eq + Hash> {
+    items: WriteHandle<String, Box<T>>,
     resource_version: Option<String>,
 }
 
-impl<T> WatchedState<T> {
+impl<T: Eq> WatchedState<T> {
     pub fn new() -> Self {
         Self {
             items: HashMap::new(),
@@ -30,7 +31,7 @@ where
     T: Metadata,
 {
     pub fn add(&mut self, item: T) {
-        self.items.insert(k, v)
+        // self.items.insert(k, v)
     }
 
     pub fn delete(&mut self, item: T) {}

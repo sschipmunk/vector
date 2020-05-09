@@ -976,6 +976,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "evmap"
+version = "10.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80703a8eecfb32b19323b1f50d8623ef96e3847a52f2540a1eca87ea323e12c5"
+dependencies = [
+ "bytes 0.5.4",
+ "hashbag",
+ "smallvec 1.2.0",
+]
+
+[[package]]
 name = "exitcode"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1385,6 +1396,12 @@ dependencies = [
  "tokio 0.2.21",
  "tokio-util",
 ]
+
+[[package]]
+name = "hashbag"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "452b31b3ffe7cf13de531eefae493301c85995a953c808d7c79a8f45abae0706"
 
 [[package]]
 name = "hashbrown"
@@ -5325,7 +5342,8 @@ dependencies = [
  "derive_is_enum_variant",
  "dirs 2.0.2",
  "elastic_responses",
- "evmap",
+ "evmap 10.0.1",
+ "evmap 7.1.3",
  "exitcode",
  "file-source",
  "flate2",

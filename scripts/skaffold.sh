@@ -13,7 +13,7 @@ EOF
 # shellcheck source=minikube-docker-env.sh
 . scripts/minikube-docker-env.sh
 
-export SKAFFOLD_CACHE_ARTIFACTS=false
+# export SKAFFOLD_CACHE_ARTIFACTS=false
 
 cargo watch -x build &
 trap 'kill -- "-$$"; exit 0' INT

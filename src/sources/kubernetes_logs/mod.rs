@@ -121,9 +121,8 @@ impl Source {
 
         let field_selector = format!("spec.nodeName={}", self_node_name);
 
-        let mut watched_state = k8s::watched_state::WatchedState::new(field_selector, None);
-
-        watched_state.watch().await;
+        let mut watcher = k8s::pods_watcher::PodsWatcher::new(self.client, Some(field_selector), None);
+        watcher.watch().await;
 
         let _ = futures::compat::Compat01As03::new(shutdown).await;
 

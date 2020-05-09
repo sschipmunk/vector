@@ -41,7 +41,7 @@ pub enum Error<ReadError>
 where
     ReadError: std::error::Error + 'static,
 {
-    /// An error accured while reading the response body.
+    /// An error occured while reading the response body.
     #[snafu(display("reading the data chunk failed"))]
     Reading {
         /// The error we got while reading.
