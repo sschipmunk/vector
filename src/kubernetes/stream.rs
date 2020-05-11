@@ -9,7 +9,8 @@ use http_body::Body;
 use k8s_openapi::{Response, ResponseError};
 use snafu::{ResultExt, Snafu};
 
-/// Converts the HTTP response body to a stream of parsed kubernetes responses.
+/// Converts the HTTP response [`Body`] to a stream of parsed Kubernetes
+/// [`Response`]s.
 pub fn body<B, T>(body: B) -> impl Stream<Item = Result<T, Error<<B as Body>::Error>>>
 where
     T: Response + Unpin + 'static,

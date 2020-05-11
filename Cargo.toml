@@ -161,7 +161,7 @@ bloom = "0.3.2"
 pulsar = { version = "0.3.0", optional = true }
 task-compat = "0.1"
 kube = { version = "0.33", optional = true }
-k8s-openapi = { version = "0.7", features = ["v1_14"], optional = true }
+k8s-openapi = { version = "0.7", features = ["v1_15"], optional = true }
 async-stream = "0.2"
 
 [target.'cfg(windows)'.dependencies]

@@ -21,7 +21,8 @@
 #![warn(missing_docs)]
 
 pub mod client;
+pub mod fake_watcher;
 pub mod multi_response_decoder;
 pub mod pods_watcher;
 pub mod stream;
-pub mod watched_state;
+pub mod watch_state;

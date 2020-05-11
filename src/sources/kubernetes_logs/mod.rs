@@ -12,9 +12,8 @@ use crate::{
     sources,
     topology::config::{DataType, GlobalOptions, SourceConfig, SourceDescription},
 };
-use futures::{future::FutureExt, stream::StreamExt};
+use futures::{future::FutureExt, pin_mut, stream::StreamExt};
 use futures01::sync::mpsc;
-use k8s_openapi::{ WatchOptional, WatchResponse};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -115,14 +114,21 @@ impl Source {
         // Enhance events with k8s metadata;
 
         let Self {
-            mut client,
+            client,
             self_node_name,
         } = self;
 
         let field_selector = format!("spec.nodeName={}", self_node_name);
 
-        let mut watcher = k8s::pods_watcher::PodsWatcher::new(self.client, Some(field_selector), None);
-        watcher.watch().await;
+        let mut watcher = k8s::pods_watcher::PodsWatcher::new(
+            client,
+            Some(field_selector),
+            None,
+            std::time::Duration::from_secs(1),
+        );
+        let watch_stream = watcher.watch();
+        pin_mut!(watch_stream);
+        watch_stream.next().await;
 
         let _ = futures::compat::Compat01As03::new(shutdown).await;
 
