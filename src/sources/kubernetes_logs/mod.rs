@@ -12,10 +12,13 @@ use crate::{
     sources,
     topology::config::{DataType, GlobalOptions, SourceConfig, SourceDescription},
 };
-use futures::{future::FutureExt, pin_mut, stream::StreamExt};
+use evmap10::{self as evmap};
+use futures::future::FutureExt;
 use futures01::sync::mpsc;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+
+mod k8s_paths_provider;
+use k8s_paths_provider::K8sPathsProvider;
 
 // # TODO List
 //
@@ -121,32 +124,27 @@ impl Source {
         let field_selector = format!("spec.nodeName={}", self_node_name);
 
         let watcher = k8s::api_watcher::ApiWatcher::new(client);
+        let (state_reader, state_writer) = evmap::new();
 
         let mut reflector = k8s::reflector::Reflector::new(
             watcher,
+            state_writer,
             Some(field_selector),
             None,
             std::time::Duration::from_secs(1),
         );
-        let watch_stream = reflector.run();
-        pin_mut!(watch_stream);
-        watch_stream.next().await;
+
+        let paths_provider = K8sPathsProvider::new(state_reader);
+
+        let paths = paths_provider.paths();
+        info!(message = "Got paths", ?paths);
+
+        let _ = reflector.run().await;
 
         let _ = futures::compat::Compat01As03::new(shutdown).await;
 
         info!("Done");
         drop(out);
         Ok(())
-    }
-}
-
-struct K8sPathsProvider {
-    // reflector: Reflector<Api<Pod>>,
-}
-
-impl K8sPathsProvider {
-    fn paths_provider(&self) -> &[PathBuf] {
-        // self.reflector
-        todo!()
     }
 }

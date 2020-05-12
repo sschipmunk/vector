@@ -14,6 +14,8 @@ use hyper13::Error as BodyError;
 use k8s_openapi::{api::core::v1::Pod, WatchOptional, WatchResponse};
 use snafu::{ResultExt, Snafu};
 
+// TODO: abstract around the request builder.
+
 /// A simple watcher atop of the Kubernetes API [`Client`].
 pub struct ApiWatcher {
     client: Client,

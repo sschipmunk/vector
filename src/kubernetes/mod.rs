@@ -23,8 +23,9 @@
 pub mod api_watcher;
 pub mod client;
 pub mod fake_watcher;
+pub mod hash_value;
 pub mod multi_response_decoder;
 pub mod reflector;
+pub mod resource_version;
 pub mod stream;
-pub mod watch_state;
 pub mod watcher;
