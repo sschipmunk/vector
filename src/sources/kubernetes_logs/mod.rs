@@ -120,13 +120,15 @@ impl Source {
 
         let field_selector = format!("spec.nodeName={}", self_node_name);
 
-        let mut watcher = k8s::pods_watcher::PodsWatcher::new(
-            client,
+        let watcher = k8s::api_watcher::ApiWatcher::new(client);
+
+        let mut reflector = k8s::reflector::Reflector::new(
+            watcher,
             Some(field_selector),
             None,
             std::time::Duration::from_secs(1),
         );
-        let watch_stream = watcher.watch();
+        let watch_stream = reflector.run();
         pin_mut!(watch_stream);
         watch_stream.next().await;
 

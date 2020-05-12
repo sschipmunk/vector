@@ -45,6 +45,7 @@ impl ResourceVersionState {
         self.0 = Some(new_resource_version.clone());
     }
 
+    /// Get the current resource version value.
     pub fn get(&self) -> Option<&str> {
         self.into()
     }

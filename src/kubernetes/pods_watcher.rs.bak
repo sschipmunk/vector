@@ -1,3 +1,5 @@
+//! Watch pods.
+
 use super::watch_state::ResourceVersionState;
 use super::{client::Client, stream as k8s_stream};
 use async_stream::try_stream;
@@ -23,6 +25,7 @@ pub struct PodsWatcher {
 }
 
 impl PodsWatcher {
+    /// Create a new [`PodsWatcher`].
     pub fn new(
         client: Client,
         field_selector: Option<String>,
@@ -49,7 +52,7 @@ impl PodsWatcher {
                 while let Some(item) = stream.next().await {
                     // Any error here is considered critical, do not attemt
                     // to retry and just quit.
-                    let item = match item?;
+                    let item = item?;
 
                     let item = match item {
                         WatchResponse::Ok(item) => item,
