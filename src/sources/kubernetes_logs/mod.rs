@@ -4,21 +4,27 @@
 
 #![deny(missing_docs)]
 
+mod k8s_paths_provider;
+mod parser;
+
+use crate::event::{self, Event};
 use crate::kubernetes as k8s;
 use crate::{
     dns::Resolver,
-    event::Event,
     shutdown::ShutdownSignal,
     sources,
     topology::config::{DataType, GlobalOptions, SourceConfig, SourceDescription},
 };
+use bytes05::Bytes;
 use evmap10::{self as evmap};
-use futures::future::FutureExt;
+use file_source::{FileServer, Fingerprinter};
+use futures::{future::FutureExt, SinkExt};
 use futures01::sync::mpsc;
-use serde::{Deserialize, Serialize};
-
-mod k8s_paths_provider;
 use k8s_paths_provider::K8sPathsProvider;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::time::Duration;
+use tokio::task::spawn_blocking;
 
 // # TODO List
 //
@@ -46,7 +52,7 @@ const COMPONENT_NAME: &str = "kubernetes_logs";
 impl SourceConfig for Config {
     fn build(
         &self,
-        _name: &str,
+        name: &str,
         globals: &GlobalOptions,
         shutdown: ShutdownSignal,
         out: mpsc::Sender<Event>,
@@ -57,7 +63,7 @@ impl SourceConfig for Config {
         let exec = rt.executor();
         let resolver = Resolver::new(globals.dns_servers.clone(), exec)?;
 
-        let source = Source::init(self, resolver)?;
+        let source = Source::init(self, resolver, globals, name)?;
 
         // TODO: this is a workaround for the legacy futures 0.1.
         // When the core is updated to futures 0.3 this should be simplied
@@ -87,10 +93,16 @@ impl SourceConfig for Config {
 struct Source {
     client: k8s::client::Client,
     self_node_name: String,
+    data_dir: PathBuf,
 }
 
 impl Source {
-    fn init(config: &Config, resolver: Resolver) -> crate::Result<Self> {
+    fn init(
+        config: &Config,
+        resolver: Resolver,
+        globals: &GlobalOptions,
+        name: &str,
+    ) -> crate::Result<Self> {
         let self_node_name = if config.self_node_name.is_empty() {
             std::env::var("VECTOR_SELF_NODE_NAME")
                 .map_err(|_| "VECTOR_SELF_NODE_NAME is not set")?
@@ -105,9 +117,12 @@ impl Source {
         let k8s_config = k8s::client::config::Config::in_cluster()?;
         let client = k8s::client::Client::new(k8s_config, resolver)?;
 
+        let data_dir = globals.resolve_and_make_data_subdir(None, name)?;
+
         Ok(Self {
             client,
             self_node_name,
+            data_dir,
         })
     }
 
@@ -119,6 +134,7 @@ impl Source {
         let Self {
             client,
             self_node_name,
+            data_dir,
         } = self;
 
         let field_selector = format!("spec.nodeName={}", self_node_name);
@@ -136,15 +152,59 @@ impl Source {
 
         let paths_provider = K8sPathsProvider::new(state_reader);
 
-        let paths = paths_provider.paths();
-        info!(message = "Got paths", ?paths);
+        // TODO: maybe some of the parameters have to be configurable.
+        let file_server = FileServer {
+            paths_provider,
+            max_read_bytes: 2048,
+            start_at_beginning: true,
+            ignore_before: None,
+            max_line_bytes: bytesize::kib(100u64) as usize,
+            data_dir,
+            glob_minimum_cooldown: Duration::from_secs(1),
+            fingerprinter: Fingerprinter::Checksum {
+                fingerprint_bytes: 256,
+                ignored_header_bytes: 0,
+            },
+            oldest_first: false,
+        };
 
         let _ = reflector.run().await;
 
-        let _ = futures::compat::Compat01As03::new(shutdown).await;
+        let (tx, rx) = futures::channel::mpsc::channel(0);
+
+        let span = info_span!("file_server");
+        let file_server_fut = spawn_blocking(move || {
+            let _enter = span.enter();
+            file_server.run(
+                tx.sink_map_err(drop),
+                futures::compat::Compat01As03::new(shutdown),
+            );
+        });
+
+        file_server_fut.await.map_err(|error| {
+            error!(message = "File server unexpectedly stopped.", %error);
+        });
 
         info!("Done");
         drop(out);
         Ok(())
     }
+}
+
+/// Here we have `bytes05::Bytes`, but the `Event` has `bytes::Bytes`.
+/// This is a really silly situation, but we have to work around it.
+/// And this is *not* fast.
+fn convert_bytes(from: Bytes) -> bytes::Bytes {
+    bytes::Bytes::from(from.as_ref())
+}
+
+fn create_event(line: Bytes) -> Event {
+    let mut event = Event::from(convert_bytes(line));
+
+    // Add source type.
+    event
+        .as_mut_log()
+        .insert(event::log_schema().source_type_key(), COMPONENT_NAME);
+
+    event
 }
