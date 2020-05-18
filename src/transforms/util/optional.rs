@@ -13,7 +13,7 @@ pub struct Optional<T: Transform>(pub Option<T>);
 impl<T: Transform> Transform for Optional<T> {
     fn transform(&mut self, event: Event) -> Option<Event> {
         match self.0 {
-            Some(val) => val.transform(event),
+            Some(ref mut val) => val.transform(event),
             None => Some(event),
         }
     }

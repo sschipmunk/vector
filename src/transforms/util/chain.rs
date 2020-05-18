@@ -7,7 +7,9 @@ use crate::{event::Event, transforms::Transform};
 /// Chains two transforms, passing the event through the `first` one, and then,
 /// if there's still an event to pass, through the second one.
 pub struct Two<A: Transform, B: Transform> {
+    /// The first transform.
     pub first: A,
+    /// The second transform.
     pub second: B,
 }
 

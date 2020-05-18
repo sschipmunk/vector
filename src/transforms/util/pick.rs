@@ -9,14 +9,14 @@ use crate::{event::Event, transforms::Transform};
 /// The implementation would have multiple candidates and a way to determine
 /// which transform to use.
 pub trait Picker: Sized {
-    /// Consumes an event, and returns a transform to use and a
-    /// transformed version of the passed event.
+    /// Consumes an event and the picker itself, and returns a transform to
+    /// use and a transformed version of the passed event.
     ///
     /// Note that the interface doesn't allow failures (i.e. it's not a
     /// [`Result`], nor [`Option`]).
     /// To handle failure modes, use provided [`Passthrough`], [`Discard`] or
     /// [`Panic`] as the returned transform, and pass the event accordingly.
-    fn probe_event(&mut self, event: Event) -> (Box<dyn Transform>, Option<Event>);
+    fn probe_event(self, event: Event) -> (Box<dyn Transform>, Option<Event>);
 }
 
 /// Dynamically pick a transform to use once (on first event), and then use the
@@ -28,7 +28,9 @@ pub enum PickOnce<T>
 where
     T: Picker + Send,
 {
-    Init(T),
+    /// The initial state.
+    Init(Option<T>),
+    /// The picked transform.
     Picked(Box<dyn Transform>),
 }
 
@@ -38,7 +40,7 @@ where
 {
     /// Create a new [`PickOnce`] using the passed `T` as the initial state.
     pub fn new(init: T) -> Self {
-        Self::Init(init)
+        Self::Init(Some(init))
     }
 }
 
@@ -48,7 +50,8 @@ where
 {
     fn transform(&mut self, event: Event) -> Option<Event> {
         match self {
-            Self::Init(mut picker) => {
+            Self::Init(picker) => {
+                let picker = picker.take().expect("impossible state");
                 let (transform, event) = picker.probe_event(event);
                 *self = Self::Picked(transform);
                 event
@@ -85,6 +88,8 @@ impl Transform for Panic {
     }
 }
 
+/// Pick transform from an iterator by passing an event to each of the iterated
+/// transport, and choosing the first that returns non-`None`.
 pub struct IterPicker<T>(T)
 where
     T: IntoIterator<Item = Box<dyn Transform>>;
@@ -93,8 +98,9 @@ impl<T> IterPicker<T>
 where
     T: IntoIterator<Item = Box<dyn Transform>>,
 {
+    /// Create a new `IterPicker` from an iterator.
     pub fn new(iter: T) -> Self {
-        Self(Some(iter))
+        Self(iter)
     }
 }
 
@@ -102,7 +108,7 @@ impl<T> Picker for IterPicker<T>
 where
     T: IntoIterator<Item = Box<dyn Transform>>,
 {
-    fn probe_event(&mut self, event: Event) -> (Box<dyn Transform>, Option<Event>) {
+    fn probe_event(self, event: Event) -> (Box<dyn Transform>, Option<Event>) {
         self.0
             .into_iter()
             .find_map(|mut candidate| {
