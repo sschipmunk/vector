@@ -6,6 +6,7 @@
 
 mod k8s_paths_provider;
 mod parser;
+mod path_helpers;
 
 use crate::event::{self, Event};
 use crate::kubernetes as k8s;
@@ -14,11 +15,15 @@ use crate::{
     shutdown::ShutdownSignal,
     sources,
     topology::config::{DataType, GlobalOptions, SourceConfig, SourceDescription},
+    transforms::Transform,
 };
-use bytes05::Bytes;
 use evmap10::{self as evmap};
 use file_source::{FileServer, Fingerprinter};
-use futures::{future::FutureExt, SinkExt};
+use futures::{
+    future::FutureExt,
+    sink::{Sink, SinkExt},
+    stream::StreamExt,
+};
 use futures01::sync::mpsc;
 use k8s_paths_provider::K8sPathsProvider;
 use serde::{Deserialize, Serialize};
@@ -68,6 +73,7 @@ impl SourceConfig for Config {
         // TODO: this is a workaround for the legacy futures 0.1.
         // When the core is updated to futures 0.3 this should be simplied
         // significantly.
+        let out = futures::compat::Compat01As03Sink::new(out);
         let fut = source.run(out, shutdown);
         let fut = fut.map(|result| {
             result.map_err(|error| {
@@ -126,7 +132,10 @@ impl Source {
         })
     }
 
-    async fn run(self, out: mpsc::Sender<Event>, shutdown: ShutdownSignal) -> crate::Result<()> {
+    async fn run<O>(self, out: O, shutdown: ShutdownSignal) -> crate::Result<()>
+    where
+        O: Sink<Event> + Send,
+    {
         // Poll k8s metadata;
         // Read files based on k8s metadata;
         // Enhance events with k8s metadata;
@@ -149,6 +158,7 @@ impl Source {
             None,
             std::time::Duration::from_secs(1),
         );
+        let reflector_process = reflector.run();
 
         let paths_provider = K8sPathsProvider::new(state_reader);
 
@@ -168,12 +178,11 @@ impl Source {
             oldest_first: false,
         };
 
-        let _ = reflector.run().await;
-
         let (tx, rx) = futures::channel::mpsc::channel(0);
 
         let span = info_span!("file_server");
-        let file_server_fut = spawn_blocking(move || {
+
+        let file_server_join_handle = spawn_blocking(move || {
             let _enter = span.enter();
             file_server.run(
                 tx.sink_map_err(drop),
@@ -181,30 +190,44 @@ impl Source {
             );
         });
 
-        file_server_fut.await.map_err(|error| {
-            error!(message = "File server unexpectedly stopped.", %error);
-        });
+        let mut transforms = {
+            let parser = parser::build();
+            let annotator = crate::transforms::util::pick::Passthrough;
+
+            crate::transforms::util::chain::Two::new(parser, annotator)
+        };
+
+        let events = rx.map(|(bytes, file)| create_event(bytes, file));
+        let events =
+            events.filter_map(move |event| futures::future::ready(transforms.transform(event)));
+
+        let event_processing_loop = events.map(Ok).forward(out);
+
+        use std::future::Future;
+        use std::pin::Pin;
+        let list: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> = vec![
+            Box::pin(reflector_process.map(|_| todo!())),
+            Box::pin(file_server_join_handle.map(|_| todo!())),
+            Box::pin(event_processing_loop.map(|_| todo!())),
+        ];
+        let mut futs: futures::stream::FuturesUnordered<_> = list.into_iter().collect();
+        futs.next().await;
 
         info!("Done");
-        drop(out);
         Ok(())
     }
 }
 
-/// Here we have `bytes05::Bytes`, but the `Event` has `bytes::Bytes`.
-/// This is a really silly situation, but we have to work around it.
-/// And this is *not* fast.
-fn convert_bytes(from: Bytes) -> bytes::Bytes {
-    bytes::Bytes::from(from.as_ref())
-}
-
-fn create_event(line: Bytes) -> Event {
-    let mut event = Event::from(convert_bytes(line));
+fn create_event(line: bytes::Bytes, origin_file: String) -> Event {
+    let mut event = Event::from(line);
 
     // Add source type.
     event
         .as_mut_log()
         .insert(event::log_schema().source_type_key(), COMPONENT_NAME);
+
+    // Add file.
+    event.as_mut_log().insert("file", origin_file);
 
     event
 }

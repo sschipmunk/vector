@@ -12,6 +12,7 @@ use k8s_openapi::{
     Metadata, WatchOptional, WatchResponse,
 };
 use snafu::Snafu;
+use std::convert::Infallible;
 use std::time::Duration;
 use tokio::time::delay_for;
 
@@ -66,7 +67,7 @@ where
     <W as Watcher>::StreamError: Unpin,
 {
     /// Run the watch loop.
-    pub async fn run(&mut self) -> Result<WatchEvent<<W as Watcher>::Object>, Error<W>> {
+    pub async fn run(&mut self) -> Result<Infallible, Error<W>> {
         self.state_writer.purge();
         loop {
             let invocation_result = self.issue_request().await;

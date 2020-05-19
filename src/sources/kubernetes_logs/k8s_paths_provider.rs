@@ -1,5 +1,6 @@
 //! A paths provider for k8s logs.
 
+use super::path_helpers::build_pod_logs_directory;
 use crate::kubernetes as k8s;
 use evmap10::ReadHandle;
 use file_source::paths_provider::PathsProvider;
@@ -38,19 +39,6 @@ impl PathsProvider for K8sPathsProvider {
             })
             .collect()
     }
-}
-
-const K8S_LOGS_DIR: &str = "/var/log";
-const LOG_PATH_DELIMITER: &str = "_";
-
-/// Based on https://github.com/kubernetes/kubernetes/blob/31305966789525fca49ec26c289e565467d1f1c4/pkg/kubelet/kuberuntime/helpers.go#L178
-fn build_pod_logs_directory(pod_namespace: &str, pod_name: &str, pod_uid: &str) -> PathBuf {
-    [
-        K8S_LOGS_DIR,
-        &[pod_namespace, pod_name, pod_uid].join(LOG_PATH_DELIMITER),
-    ]
-    .iter()
-    .collect()
 }
 
 fn extract_pod_logs_directory(pod: &Pod) -> Option<PathBuf> {
